@@ -1,10 +1,9 @@
 import sys
 import pygame
-from position import Position
-from game_objects import Ship, Bullet, Asteroid, Explosion
+from game_objects import Ship, Bullet, Asteroid
 from levels.level1 import Level1
 from event_manager import EventManager
-
+from game_objects.explosion import Explosion
 
 class Game(object):    
     TITLE = 'BATTLE SHIPS'
@@ -18,18 +17,31 @@ class Game(object):
     
     def __init__(self):
         pygame.init()
-        self.__screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
-        pygame.display.set_caption(self.TITLE)
-        self.__clock = pygame.time.Clock()
         
-        self.__player = None
-        self.__asteroids = []
-        self.__bullets = []
-        self.__explosions = []
-        self.__gameCompleted = False
+        pygame.mixer.init()
+        self.fireSound = 'sounds/fire.wav'
+        self.explosionSound = 'sounds/explosion.wav'
+        
+        self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
+        pygame.display.set_caption(self.TITLE)
+        self.clock = pygame.time.Clock()
+        
+        self.eventManager = EventManager(self)
+        
+        self.player = None
+        self.sprites = pygame.sprite.Group()
+        self.asteroids = pygame.sprite.Group()
+        self.enemies = pygame.sprite.Group()
+        self.bullets = pygame.sprite.Group()
+        self.explosions = pygame.sprite.Group()
+        self.gameCompleted = False
+        
+        self.levels = [
+           Level1(self),
+        ]
         
     def SetBackGround(self, color = BLACK):
-        self.__screen.fill(color)
+        self.screen.fill(color)
         
     def WriteText(self, text, surFace, position, fontSize = 36, color = WHITE):
         font = pygame.font.Font(None, fontSize)
@@ -38,59 +50,52 @@ class Game(object):
         surFace.blit(text, position)
         
     def Run(self):
-        self.__score = 0
-        self.__player = Ship(Position(self.WIDTH /2 - Ship.WIDTH/2, self.HEIGHT - Ship.HEIGHT))
-            
-        level = Level1(self)
-        level.run()
+        self.score = 0
+        self.player = Ship(self)
+        self.player.rect.x = self.WIDTH/2 - self.player.rect.width/2
+        self.player.rect.y = self.HEIGHT - self.player.rect.height
+        self.sprites.add(self.player)
         
-        if self.__player.IsAlive():
+        for level in self.levels:
+            self.RunLevel(level)
+
+        if self.player.alive():
             self.Win()
-    
-    def DrawImage(self, imageFile, position = None):
-        image = pygame.image.load('images/' + str(imageFile)).convert_alpha()
-        
-        if position is None:
-            position = image.get_rect()
-        elif isinstance(position, Position):
-            position = position.ToTuple()
-        
-        self.__screen.blit(image, position)
-        
-    def GetEvents(self):
-        for event in pygame.event.get():
-            yield event
+            
+    def RunLevel(self, level):
+        while level.levelComplete == False:
+            self.eventManager.PreProcess()
+            for event in pygame.event.get():
+                self.eventManager.ProcessEvent(event)
+                
+            self.SetBackGround(self.BLACK)
+                            
+            self.Update()
+            level.GameLogic()
+            self.CheckForCollisions()
+            self.Draw()
+            self.RefreshScreen()
             
     def RefreshScreen(self):
         pygame.display.flip()
-        self.__clock.tick(50)
+        self.clock.tick(50)
+        
+    def Update(self):
+        self.sprites.update()
         
     def Draw(self):
-        for arr in self.__explosions:
-            arr[0].Draw(self)
-            
-            if arr[1] == 0:
-                self.__explosions.remove(arr)
-            else:
-                arr[1] -= 1
-            
-        for obj in self.__asteroids:
-            obj.Draw(self)
-            
-        for obj in self.__bullets:
-            obj.Draw(self)
-            
-        if self.__player.IsAlive():
-            self.__player.Draw(self)
-        else:
-            self.WriteText('Game Over', self.__screen, (320,250), 50, Game.RED)
-            self.WriteText('(Press Esc To Quit Or F2 To Restart)', self.__screen, (250,300), 25, Game.WHITE)
-            
-        self.WriteText('Score = ' + str(self.__score), self.__screen, (10,10), 30, Game.WHITE)
+        self.sprites.draw(self.screen)
         
-        if self.__gameCompleted == True:
-            self.WriteText('You Won! Congratulations!', self.__screen, (180,250), 50, Game.RED)
-            self.WriteText('(Press Esc To Quit Or F2 To Restart)', self.__screen, (250,300), 25, Game.WHITE)
+        if self.player.alive() == False:
+            self.WriteText('Game Over', self.screen, (320,250), 50, Game.RED)
+            self.WriteText('(Press Esc To Quit Or F2 To Restart)', self.screen, (250,300), 25, Game.WHITE)
+            
+        self.WriteText('Score = ' + str(self.score), self.screen, (10,10), 30, Game.WHITE)
+        self.WriteText('HEALTH ' + str(self.player.health), self.screen, (400,10), 30, Game.WHITE)
+        
+        if self.gameCompleted == True:
+            self.WriteText('You Won! Congratulations!', self.screen, (180,250), 50, Game.RED)
+            self.WriteText('(Press Esc To Quit Or F2 To Restart)', self.screen, (250,300), 25, Game.WHITE)
         
     def Quit(self):
         pygame.quit()
@@ -98,15 +103,18 @@ class Game(object):
         
     def Fire(self, obj = None):
         if obj is None:
-            obj = self.__player
+            obj = self.player
             
-        if obj.IsAlive() == False:
+        if obj.alive() == False:
             return
         
-        y = obj.Position().Y() - Bullet.HEIGHT;
-        x = obj.Position().X() + (obj.WIDTH/2 - Bullet.WIDTH/2)
+        rect = obj.rect
+        bullet = Bullet(self)
+        bullet.rect.x = rect.x + rect.width/2 - bullet.rect.width/2
+        bullet.rect.y = rect.y -  bullet.rect.height 
         
-        self.__bullets.append(Bullet(Position(x,y)))
+        self.bullets.add(bullet)
+        self.sprites.add(bullet)
         
     def Restart(self):
         self.__init__()
@@ -114,58 +122,120 @@ class Game(object):
         
     def GoLeft(self, obj = None):
         if obj is None:
-            obj = self.__player
+            obj = self.player
             
-        if obj.IsAlive() == False:
+        if obj.alive() == False:
             return
         
-        self.__player.GoLeft()
+        self.player.GoLeft()
         
     def GoRight(self, obj = None):
         if obj is None:
-            obj = self.__player
+            obj = self.player
             
-        if obj.IsAlive() == False:
+        if obj.alive() == False:
             return
         
-        self.__player.GoRight()
+        self.player.GoRight()
         
-    def CreateAsteroid(self, position):
-        self.__asteroids.append(Asteroid(position))
+    def CreateAsteroid(self, (x, y)):
+        asteroid = Asteroid(self)
+        asteroid.rect.x = x
+        asteroid.rect.y = y
+        self.asteroids.add(asteroid)
+        self.sprites.add(asteroid)
         
     def CheckForCollisions(self):
-        for obj in self.__asteroids:
-            if obj.CheckForCollision(self.__player) and self.__player.IsAlive():
-                obj.Kill()
-                self.__player.Kill()
-                self.__explosions.append([Explosion(self.__player.Position()), 10])
-                continue
+        hitedObjects = []
+        for obj in self.bullets:
+            hits = pygame.sprite.spritecollide(obj, self.asteroids, True)
+            if len(hits) > 0:
+                obj.kill()
+            hitedObjects += hits
+            
+        for obj in hitedObjects:
+            self.score += 5
+            
+            explosion = Explosion(self)
+            explosion.rect.x = obj.rect.x
+            explosion.rect.y = obj.rect.y
+            self.explosions.add(explosion)
+            self.sprites.add(explosion)
+            
+        hitedObjects = []
+        for obj in self.bullets:
+            hits = pygame.sprite.spritecollide(obj, self.enemies, True)
+            if len(hits) > 0:
+                obj.kill()
+            hitedObjects += hits
+            
+        for obj in hitedObjects:
+            self.score += 10
+            
+            explosion = Explosion(self)
+            explosion.rect.x = obj.rect.x
+            explosion.rect.y = obj.rect.y
+            self.explosions.add(explosion)
+            self.sprites.add(explosion)
+            
+        hitedObjects = []
+        for obj in self.asteroids:
+            hits = pygame.sprite.spritecollide(obj, self.enemies, True)
+            if len(hits) > 0:
+                obj.kill()
                 
-            for bullet in self.__bullets:
-                if obj.CheckForCollision(bullet):
-                    obj.Kill()
-                    bullet.Kill()   
-                    self.__explosions.append([Explosion(obj.Position()), 10])
-                    self.__score += 5
-                    continue
+                explosion = Explosion(self)
+                explosion.rect.x = obj.rect.x
+                explosion.rect.y = obj.rect.y
+                self.explosions.add(explosion)
+                self.sprites.add(explosion)
+            hitedObjects += hits
+            
+        for obj in hitedObjects:
+            self.score += 1
+            
+            explosion = Explosion(self)
+            explosion.rect.x = obj.rect.x
+            explosion.rect.y = obj.rect.y
+            self.explosions.add(explosion)
+            self.sprites.add(explosion)
+            
+        if self.player.alive():
+            asteroidhits = pygame.sprite.spritecollide(self.player, self.asteroids, True)
+            for obj in asteroidhits:
+                self.player.health -= 5
                 
-    def GetAstroids(self):
-        return self.__asteroids
-        
-    def GetBullets(self):
-        return self.__bullets
-        
-    def ClearDeadObjects(self):
-        objects = self.__asteroids + self.__bullets
-        for obj in objects:
-            if obj.IsAlive() == False:
-                if obj in self.__asteroids:
-                    self.__asteroids.remove(obj)
-                elif obj in self.__bullets:    
-                    self.__bullets.remove(obj)
+                explosion = Explosion(self)
+                explosion.rect.x = obj.rect.x
+                explosion.rect.y = obj.rect.y
+                self.explosions.add(explosion)
+                self.sprites.add(explosion)
+                
+            bullethits = pygame.sprite.spritecollide(self.player, self.bullets, True)
+            for obj in bullethits:
+                self.player.health -= 2
+                
+                explosion = Explosion(self)
+                explosion.rect.x = obj.rect.x
+                explosion.rect.y = obj.rect.y
+                self.explosions.add(explosion)
+                self.sprites.add(explosion)
+                
+            enemyhits = pygame.sprite.spritecollide(self.player, self.enemies, True)
+            for obj in enemyhits:
+                explosion = Explosion(self)
+                explosion.rect.x = obj.rect.x
+                explosion.rect.y = obj.rect.y
+                self.explosions.add(explosion)
+                self.sprites.add(explosion)
+                
+                self.player.health -= 20
+                
+            if self.player.health <= 0:
+                self.player.kill()
                     
     def Win(self):
-        self.__gameCompleted = True
+        self.gameCompleted = True
         eventManager = EventManager(self)
         while True:
             for event in self.GetEvents():
@@ -173,3 +243,7 @@ class Game(object):
                 
             self.Draw()
             self.RefreshScreen()
+            
+    def PlaySound(self, sound):
+        pygame.mixer.music.load(sound)
+        pygame.mixer.music.play(0)

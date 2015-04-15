@@ -1,15 +1,14 @@
 from game_object import GameObject
 
-'''
-Created on Apr 6, 2015
-
-@author: ytsonev
-'''
-
 class Explosion(GameObject):
-    WIDTH = 128;
-    HEIGHT = 128;
-    IMAGE = 'boom.gif'
-    
-    def __init__(self, position):
-        super(Explosion, self).__init__(position)
+    def __init__(self, game, time = 5):
+        super(Explosion, self).__init__('boom.gif', game)
+        
+        self.time = time
+       
+    def update(self, *args):
+        GameObject.update(self, *args)
+        self.game.PlaySound(self.game.explosionSound)
+        self.time -= 1
+        if self.time <= 0:
+            self.kill()

@@ -1,15 +1,18 @@
 from game_object import GameObject
 
-'''
-Created on Apr 6, 2015
-
-@author: ytsonev
-'''
-
 class Ship(GameObject):
-    WIDTH = 103
-    HEIGHT = 100
-    IMAGE = 'ship.png'
-    
-    def __init__(self, position):
-        super(Ship, self).__init__(position)
+    def __init__(self, game):
+        super(Ship, self).__init__('ship.png', game)
+        self.health = 100
+        
+    def GoRight(self, speed = 5):
+        self.rect.x += speed
+        
+        if self.rect.x > self.game.WIDTH:
+            self.rect.x = 0 - self.rect.width
+        
+    def GoLeft(self, speed = 5):
+        self.rect.x -= speed
+        
+        if self.rect.x < 0 - self.rect.width:
+            self.rect.x = self.game.WIDTH
