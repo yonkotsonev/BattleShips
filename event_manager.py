@@ -30,7 +30,6 @@ class EventManager(object):
             self.rightKeyPressed = False;
             
         if event.type == KEYDOWN and event.key == K_SPACE:
-            self.game.PlaySound(self.game.fireSound)
             self.game.Fire()
             
         if event.type == KEYDOWN and event.key == K_F2:
