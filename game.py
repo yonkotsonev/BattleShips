@@ -1,7 +1,8 @@
 import sys
 import pygame
-from game_objects import Ship, Bullet, Asteroid, Star
+from game_objects import Ship, Bullet, Asteroid, Star, Enemy
 from levels.level1 import Level1
+from levels.level2 import Level2
 from event_manager import EventManager
 from game_objects.explosion import Explosion
 
@@ -43,6 +44,7 @@ class Game(object):
         
         self.levels = [
            Level1(self),
+           Level2(self),
         ]
         
     def SetBackGround(self, image = None, color = BLACK):
@@ -60,8 +62,6 @@ class Game(object):
     def Run(self):
         self.score = 0
         self.player = Ship(self)
-        self.player.rect.x = self.WIDTH/2 - self.player.rect.width/2
-        self.player.rect.y = self.HEIGHT - self.player.rect.height
         self.sprites.add(self.player)
         
         self.PlayBackGroundMusic('sounds/theme.mp3')
@@ -73,6 +73,8 @@ class Game(object):
             self.Win()
             
     def RunLevel(self, level):
+        self.player.rect.x = self.WIDTH/2 - self.player.rect.width/2
+        self.player.rect.y = self.HEIGHT - self.player.rect.height
         self.LevelStart(level)
             
         while level.levelComplete == False:
@@ -204,16 +206,23 @@ class Game(object):
         sys.exit()
         
     def Fire(self, obj = None):
+        enemy = False
         if obj is None:
             obj = self.player
+        else:
+            enemy = True
             
         if obj.alive() == False:
             return
         
         rect = obj.rect
-        bullet = Bullet(self)
+        bullet = Bullet(self, enemy)
         bullet.rect.x = rect.x + rect.width/2 - bullet.rect.width/2
-        bullet.rect.y = rect.y -  bullet.rect.height 
+        
+        if enemy == False:
+            bullet.rect.y = rect.y - bullet.rect.height 
+        else:
+            bullet.rect.y = rect.y + rect.height
         
         self.bullets.add(bullet)
         self.sprites.add(bullet)
@@ -244,6 +253,11 @@ class Game(object):
         asteroid = Asteroid(self)
         self.asteroids.add(asteroid)
         self.sprites.add(asteroid)
+
+    def CreateEnemy(self):
+        enemy = Enemy(self)
+        self.enemies.add(enemy)
+        self.sprites.add(enemy)
         
     def CreateStar(self):
         star = Star(self)
